@@ -1,0 +1,16 @@
+{
+  "name": "pixelforge-plugins",
+  "version": "1.0.0",
+  "description": "Pixel art generation and sprite processing tools for game development.",
+  "owner": {
+    "name": "Tomas Grasl",
+    "url": "https://github.com/freema"
+  },
+  "plugins": [
+    {
+      "name": "pixelforge-mcp",
+      "source": "./",
+      "description": "Forge pixel art sprites, animations, backgrounds & thumbnails using Google Gemini"
+    }
+  ]
+}

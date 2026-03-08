@@ -1,0 +1,14 @@
+{
+  "name": "pixelforge-mcp",
+  "version": "0.1.0",
+  "description": "Forge pixel art sprites, animations, backgrounds & thumbnails using Google Gemini. Auto prompt engineering, crop, background removal, and sprite sheet splitting.",
+  "mcpServers": {
+    "pixelforge": {
+      "command": "npx",
+      "args": ["-y", "pixelforge-mcp@latest"],
+      "env": {
+        "GEMINI_API_KEY": ""
+      }
+    }
+  }
+}
