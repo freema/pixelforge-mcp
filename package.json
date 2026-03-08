@@ -1,6 +1,6 @@
 {
   "name": "pixelforge-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that forges pixel art sprites & game assets using Google Gemini",
   "author": "Tomas Grasl",
   "license": "MIT",
