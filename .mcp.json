@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pixelforge": {
+      "command": "npx",
+      "args": ["-y", "pixelforge-mcp@latest"],
+      "env": {
+        "GEMINI_API_KEY": ""
+      }
+    }
+  }
+}
