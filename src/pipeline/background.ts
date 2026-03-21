@@ -83,11 +83,7 @@ export function bgToRgb(bgKey: Background): BgColor {
  * - If detected is far from hint → model generated a DIFFERENT bg color.
  *   Use detected (it's what's actually in the image).
  */
-export function reconcileBgColor(
-  hint: BgColor,
-  detected: BgColor,
-  bgKey: Background
-): BgColor {
+export function reconcileBgColor(hint: BgColor, detected: BgColor, bgKey: Background): BgColor {
   const close =
     Math.abs(detected.r - hint.r) <= 50 &&
     Math.abs(detected.g - hint.g) <= 50 &&

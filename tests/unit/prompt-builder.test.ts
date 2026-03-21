@@ -79,11 +79,10 @@ describe('buildTemplateSystemPrompt + buildTemplateAnimationUserPrompt', () => {
   });
 
   it('user prompt includes frame descriptions when provided', () => {
-    const prompt = buildTemplateAnimationUserPrompt(
-      'a slime',
-      'bouncing',
-      ['compressed', 'stretched']
-    );
+    const prompt = buildTemplateAnimationUserPrompt('a slime', 'bouncing', [
+      'compressed',
+      'stretched',
+    ]);
     expect(prompt).toContain('Cell 1');
     expect(prompt).toContain('compressed');
     expect(prompt).toContain('Cell 2');
@@ -91,10 +90,7 @@ describe('buildTemplateSystemPrompt + buildTemplateAnimationUserPrompt', () => {
   });
 
   it('user prompt falls back to action when no frame descriptions', () => {
-    const prompt = buildTemplateAnimationUserPrompt(
-      'a bird',
-      'flying'
-    );
+    const prompt = buildTemplateAnimationUserPrompt('a bird', 'flying');
     expect(prompt).toContain('Animation: a bird flying');
   });
 

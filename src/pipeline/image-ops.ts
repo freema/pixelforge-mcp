@@ -607,12 +607,7 @@ export function splitAndProcess(
 
     let sprite = cropPixels(img.pixels, img.width, cx1, cy1, cx2, cy2);
     // Use compositing-equation soft alpha for accurate bg removal
-    sprite.pixels = removeBackgroundColor(
-      sprite.pixels,
-      sprite.width,
-      sprite.height,
-      bgColor
-    );
+    sprite.pixels = removeBackgroundColor(sprite.pixels, sprite.width, sprite.height, bgColor);
 
     // Tight crop to non-transparent pixels
     let x1t = sprite.width,
@@ -807,9 +802,7 @@ export function generateGridTemplate(
 
   // Grid line color — RED by default, BLUE if bg is close to red
   const closeToRed =
-    Math.abs(bgColor.r - 255) < 60 &&
-    Math.abs(bgColor.g - 0) < 60 &&
-    Math.abs(bgColor.b - 0) < 60;
+    Math.abs(bgColor.r - 255) < 60 && Math.abs(bgColor.g - 0) < 60 && Math.abs(bgColor.b - 0) < 60;
   const lineR = closeToRed ? 0 : 255;
   const lineG = 0;
   const lineB = closeToRed ? 255 : 0;

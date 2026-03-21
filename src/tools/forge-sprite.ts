@@ -4,7 +4,12 @@ import { generate } from '../engine/gemini.js';
 import { buildSpritePrompt } from '../pipeline/prompt-builder.js';
 import { decodeImage, encodePNG, detectFormat } from '../pipeline/png.js';
 import { processSpriteColor, snapToPixelArtSize, detectBgColor } from '../pipeline/image-ops.js';
-import { resolveBackground, bgToRgb, reconcileBgColor, VALID_BACKGROUNDS } from '../pipeline/background.js';
+import {
+  resolveBackground,
+  bgToRgb,
+  reconcileBgColor,
+  VALID_BACKGROUNDS,
+} from '../pipeline/background.js';
 import { forgeResponse, errorResponse } from '../utils/response-helpers.js';
 import { log } from '../utils/logger.js';
 import { MODEL_ALIASES, DEFAULT_MODEL } from '../engine/models.js';

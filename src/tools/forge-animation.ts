@@ -18,7 +18,13 @@ import {
   processSpriteColor,
   detectBgColor,
 } from '../pipeline/image-ops.js';
-import { resolveBackground, bgToRgb, reconcileBgColor, BG_COLOR_MAP, VALID_BACKGROUNDS } from '../pipeline/background.js';
+import {
+  resolveBackground,
+  bgToRgb,
+  reconcileBgColor,
+  BG_COLOR_MAP,
+  VALID_BACKGROUNDS,
+} from '../pipeline/background.js';
 import { forgeResponse, errorResponse } from '../utils/response-helpers.js';
 import { log } from '../utils/logger.js';
 import { MODEL_ALIASES, DEFAULT_MODEL } from '../engine/models.js';
@@ -151,7 +157,14 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
       prompt = buildTemplateAnimationUserPrompt(description, action, frameDescriptions);
       log(`Using template-guided generation (${templateCols}x${templateRows} grid)`);
     } else {
-      prompt = buildAnimationPrompt(description, frameCount, action, frameDescriptions, style, bgKey);
+      prompt = buildAnimationPrompt(
+        description,
+        frameCount,
+        action,
+        frameDescriptions,
+        style,
+        bgKey
+      );
     }
 
     log(`Prompt: ${prompt}`);

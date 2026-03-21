@@ -68,7 +68,13 @@ export async function handleForgeTileset(input: unknown): Promise<McpToolRespons
     // Just pixelate downscale — no bg removal for textures
     let result = decoded;
     if (targetSize > 0 && (decoded.width > targetSize || decoded.height > targetSize)) {
-      result = pixelateDownscale(decoded.pixels, decoded.width, decoded.height, targetSize, targetSize);
+      result = pixelateDownscale(
+        decoded.pixels,
+        decoded.width,
+        decoded.height,
+        targetSize,
+        targetSize
+      );
     }
 
     const pngBuf = encodePNG(result.width, result.height, result.pixels);
@@ -84,7 +90,9 @@ export async function handleForgeTileset(input: unknown): Promise<McpToolRespons
       size: pngBuf.length,
     };
 
-    log(`Saved: ${outputPath} (${forgeResult.width}x${forgeResult.height}, target: ${targetSize}px)`);
+    log(
+      `Saved: ${outputPath} (${forgeResult.width}x${forgeResult.height}, target: ${targetSize}px)`
+    );
     return forgeResponse([forgeResult], { prompt, model: model ?? DEFAULT_MODEL });
   } catch (err) {
     return errorResponse(err instanceof Error ? err : new Error(String(err)));

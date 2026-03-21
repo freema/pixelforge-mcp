@@ -36,13 +36,21 @@ describe('sliceGrid', () => {
         const isTop = y < 50;
         const isLeft = x < 100;
         if (isTop && isLeft) {
-          pixels[i] = 255; pixels[i + 1] = 0; pixels[i + 2] = 0;
+          pixels[i] = 255;
+          pixels[i + 1] = 0;
+          pixels[i + 2] = 0;
         } else if (isTop && !isLeft) {
-          pixels[i] = 0; pixels[i + 1] = 255; pixels[i + 2] = 0;
+          pixels[i] = 0;
+          pixels[i + 1] = 255;
+          pixels[i + 2] = 0;
         } else if (!isTop && isLeft) {
-          pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 255;
+          pixels[i] = 0;
+          pixels[i + 1] = 0;
+          pixels[i + 2] = 255;
         } else {
-          pixels[i] = 255; pixels[i + 1] = 255; pixels[i + 2] = 0;
+          pixels[i] = 255;
+          pixels[i + 1] = 255;
+          pixels[i + 2] = 0;
         }
         pixels[i + 3] = 255;
       }

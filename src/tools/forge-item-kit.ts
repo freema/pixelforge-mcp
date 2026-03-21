@@ -16,7 +16,13 @@ import {
   snapToPixelArtSize,
   detectBgColor,
 } from '../pipeline/image-ops.js';
-import { resolveBackground, bgToRgb, reconcileBgColor, BG_COLOR_MAP, VALID_BACKGROUNDS } from '../pipeline/background.js';
+import {
+  resolveBackground,
+  bgToRgb,
+  reconcileBgColor,
+  BG_COLOR_MAP,
+  VALID_BACKGROUNDS,
+} from '../pipeline/background.js';
 import { forgeResponse, errorResponse } from '../utils/response-helpers.js';
 import { log } from '../utils/logger.js';
 import { MODEL_ALIASES, DEFAULT_MODEL } from '../engine/models.js';
@@ -48,8 +54,7 @@ export const forgeItemKitTool = {
       },
       size: {
         type: 'number',
-        description:
-          'Target sprite size in pixels (default: 48). Snaps to nearest standard size.',
+        description: 'Target sprite size in pixels (default: 48). Snaps to nearest standard size.',
       },
       style: {
         type: 'string',
