@@ -22,52 +22,43 @@ describe.skipIf(!HAS_KEY)('Integration: generation tools', () => {
     }
   });
 
-  it(
-    'forge_tileset generates a valid PNG of correct size',
-    async () => {
-      const outputPath = join(tmpDir, 'grass.png');
-      const result = await handleForgeTileset({
-        description: 'green grass terrain',
-        outputPath,
-        size: 32,
-      });
+  it('forge_tileset generates a valid PNG of correct size', { timeout: 45000 }, async () => {
+    const outputPath = join(tmpDir, 'grass.png');
+    const result = await handleForgeTileset({
+      description: 'green grass terrain',
+      outputPath,
+      size: 32,
+    });
 
-      expect(result.isError).toBeUndefined();
-      const fileInfo = await stat(outputPath);
-      expect(fileInfo.size).toBeGreaterThan(0);
+    expect(result.isError).toBeUndefined();
+    const fileInfo = await stat(outputPath);
+    expect(fileInfo.size).toBeGreaterThan(0);
 
-      // Parse response
-      const text = (result.content[0] as { text: string }).text;
-      const parsed = JSON.parse(text);
-      expect(parsed.files[0].width).toBe(32);
-      expect(parsed.files[0].height).toBe(32);
-    },
-    { timeout: 45000 }
-  );
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(parsed.files[0].width).toBe(32);
+    expect(parsed.files[0].height).toBe(32);
+  });
 
-  it(
-    'forge_item_kit generates correct number of sprite files',
-    async () => {
-      const prefix = join(tmpDir, 'fruit');
-      const result = await handleForgeItemKit({
-        items: ['red apple', 'yellow banana', 'purple grapes'],
-        outputPrefix: prefix,
-        size: 32,
-        names: ['apple', 'banana', 'grapes'],
-      });
+  it('forge_item_kit generates correct number of sprite files', { timeout: 45000 }, async () => {
+    const prefix = join(tmpDir, 'fruit');
+    const result = await handleForgeItemKit({
+      items: ['red apple', 'yellow banana', 'purple grapes'],
+      outputPrefix: prefix,
+      size: 32,
+      names: ['apple', 'banana', 'grapes'],
+    });
 
-      expect(result.isError).toBeUndefined();
+    expect(result.isError).toBeUndefined();
 
-      // Check files exist
-      const files = await readdir(tmpDir);
-      const fruitFiles = files.filter((f) => f.startsWith('fruit-'));
-      expect(fruitFiles.length).toBe(3);
-    },
-    { timeout: 45000 }
-  );
+    const files = await readdir(tmpDir);
+    const fruitFiles = files.filter((f) => f.startsWith('fruit-'));
+    expect(fruitFiles.length).toBe(3);
+  });
 
   it(
     'forge_sprite with auto background produces a transparent sprite',
+    { timeout: 45000 },
     async () => {
       const outputPath = join(tmpDir, 'forest-elf.png');
       const result = await handleForgeSprite({
@@ -80,12 +71,12 @@ describe.skipIf(!HAS_KEY)('Integration: generation tools', () => {
       expect(result.isError).toBeUndefined();
       const fileInfo = await stat(outputPath);
       expect(fileInfo.size).toBeGreaterThan(0);
-    },
-    { timeout: 45000 }
+    }
   );
 
   it(
     'forge_animation with template produces correct number of frames',
+    { timeout: 45000 },
     async () => {
       const prefix = join(tmpDir, 'slime-anim');
       const result = await handleForgeAnimation({
@@ -102,7 +93,6 @@ describe.skipIf(!HAS_KEY)('Integration: generation tools', () => {
       const text = (result.content[0] as { text: string }).text;
       const parsed = JSON.parse(text);
       expect(parsed.meta.frameCount).toBe(3);
-    },
-    { timeout: 45000 }
+    }
   );
 });
