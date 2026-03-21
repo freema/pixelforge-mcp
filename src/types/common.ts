@@ -10,6 +10,18 @@ export interface McpToolResponse {
 
 export type Style = 'neon' | 'retro' | 'gameboy' | 'snes' | 'clean';
 
+export type Background =
+  | 'black'
+  | 'white'
+  | 'forest'
+  | 'sky'
+  | 'dungeon'
+  | 'lava'
+  | 'ocean'
+  | 'sand'
+  | 'snow'
+  | 'night';
+
 export interface ModelDef {
   id: string;
   engine: 'gemini';

@@ -1,9 +1,24 @@
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import { dirname, resolve } from 'path';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { generate } from '../engine/gemini.js';
-import { buildAnimationPrompt } from '../pipeline/prompt-builder.js';
+import {
+  buildAnimationPrompt,
+  buildTemplateAnimationUserPrompt,
+  buildTemplateSystemPrompt,
+  computeGridLayout,
+} from '../pipeline/prompt-builder.js';
 import { decodeImage, encodePNG, detectFormat } from '../pipeline/png.js';
-import { splitAndProcess, snapToPixelArtSize } from '../pipeline/image-ops.js';
+import {
+  splitAndProcess,
+  snapToPixelArtSize,
+  sliceGridCropped,
+  generateGridTemplate,
+  processSpriteColor,
+  detectBgColor,
+} from '../pipeline/image-ops.js';
+import { resolveBackground, bgToRgb, reconcileBgColor, BG_COLOR_MAP, VALID_BACKGROUNDS } from '../pipeline/background.js';
 import { forgeResponse, errorResponse } from '../utils/response-helpers.js';
 import { log } from '../utils/logger.js';
 import { MODEL_ALIASES, DEFAULT_MODEL } from '../engine/models.js';
@@ -53,8 +68,9 @@ export const forgeAnimationTool = {
       },
       background: {
         type: 'string',
-        enum: ['black', 'white'],
-        description: 'Generation background color (default: black)',
+        enum: ['auto', ...VALID_BACKGROUNDS],
+        description:
+          'Background color for generation. Use "auto" to pick based on description. Named colors: forest, sky, dungeon, lava, ocean, sand, snow, night. (default: black)',
       },
       size: {
         type: 'number',
@@ -64,6 +80,11 @@ export const forgeAnimationTool = {
       square: {
         type: 'boolean',
         description: 'Pad each frame to square (default: true)',
+      },
+      useTemplate: {
+        type: 'boolean',
+        description:
+          'Use grid template reference for precise frame placement (default: false). When true, generates a numbered grid template and sends it as a reference image for more consistent frame splitting.',
       },
       model: {
         type: 'string',
@@ -90,37 +111,101 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
     const outputPrefix = args.outputPrefix as string;
     const names = args.names as string[] | undefined;
     const style = (args.style as Style) ?? 'clean';
-    const bg = (args.background as 'black' | 'white') ?? 'black';
+    const bgInput = args.background as string | undefined;
     const size = args.size as number | undefined;
     const square = (args.square as boolean) ?? true;
+    const useTemplate = (args.useTemplate as boolean) ?? false;
     const model = args.model as string | undefined;
     const references = args.references as string[] | undefined;
 
-    const prompt = buildAnimationPrompt(
-      description,
-      frameCount,
-      action,
-      frameDescriptions,
-      style,
-      bg
-    );
-    log(`Prompt: ${prompt}`);
+    const bgKey = resolveBackground(bgInput, description);
+    const bgColor = bgToRgb(bgKey);
+    const targetSize = snapToPixelArtSize(size ?? 48);
 
-    const images = await generate({ prompt, model, aspect: '4:3', references });
+    let prompt: string;
+    let allRefs = references ? [...references] : [];
+    let tempTemplatePath: string | undefined;
+
+    let systemInstruction: string | undefined;
+
+    // Grid layout for template mode (reused after generation for slicing)
+    let templateCols = 0;
+    let templateRows = 0;
+
+    if (useTemplate) {
+      // Template-guided generation — use square-ish grid like godogen
+      const grid = computeGridLayout(frameCount);
+      templateCols = grid.cols;
+      templateRows = grid.rows;
+      const cellSize = 256;
+      const total = templateCols * templateRows;
+      const bgHex = BG_COLOR_MAP[bgKey].hex;
+
+      const template = generateGridTemplate(templateCols, templateRows, cellSize, bgColor);
+      const templatePng = encodePNG(template.width, template.height, template.pixels);
+      tempTemplatePath = join(tmpdir(), `pixelforge-template-${Date.now()}.png`);
+      await writeFile(tempTemplatePath, templatePng);
+
+      allRefs = [tempTemplatePath, ...allRefs];
+      systemInstruction = buildTemplateSystemPrompt(templateCols, templateRows, total, bgHex);
+      prompt = buildTemplateAnimationUserPrompt(description, action, frameDescriptions);
+      log(`Using template-guided generation (${templateCols}x${templateRows} grid)`);
+    } else {
+      prompt = buildAnimationPrompt(description, frameCount, action, frameDescriptions, style, bgKey);
+    }
+
+    log(`Prompt: ${prompt}`);
+    log(`Background: ${bgKey} (rgb: ${bgColor.r},${bgColor.g},${bgColor.b})`);
+
+    const images = await generate({
+      prompt,
+      model,
+      aspect: useTemplate ? computeGridLayout(frameCount).aspect : '4:3',
+      references: allRefs.length ? allRefs : undefined,
+      systemInstruction,
+    });
+
+    // Cleanup temp template
+    if (tempTemplatePath) {
+      await unlink(tempTemplatePath).catch(() => {});
+    }
+
     const imgBuf = Buffer.from(images[0]!.b64, 'base64');
     const format = detectFormat(imgBuf);
     const decoded = decodeImage(imgBuf);
     const threshold = format === 'jpeg' ? 60 : 25;
 
-    log(`Raw sheet: ${decoded.width}x${decoded.height} (${format}, threshold: ${threshold})`);
+    // Detect actual bg from edges, reconcile with hint
+    const detectedBg = detectBgColor(decoded.pixels, decoded.width, decoded.height);
+    const useBg = reconcileBgColor(bgColor, detectedBg, bgKey);
 
-    const targetSize = snapToPixelArtSize(size ?? 48);
-    const frameDatas = splitAndProcess(decoded, {
-      square,
-      expectedFrames: frameCount,
-      threshold,
-      maxSize: targetSize,
-    });
+    log(
+      `Raw sheet: ${decoded.width}x${decoded.height} (${format}, detected: rgb(${detectedBg.r},${detectedBg.g},${detectedBg.b}), using: rgb(${useBg.r},${useBg.g},${useBg.b}))`
+    );
+
+    let frameDatas;
+
+    if (useTemplate) {
+      // Deterministic grid slicing with edge crop (removes red lines + margin)
+      const cells = sliceGridCropped(decoded, templateCols, templateRows);
+      // Process each cell: remove bg, crop, square, downscale
+      frameDatas = cells.slice(0, frameCount).map((cell) =>
+        processSpriteColor(cell, useBg, {
+          square,
+          threshold,
+          size: targetSize,
+        })
+      );
+    } else {
+      // Blob-based splitting
+      frameDatas = splitAndProcess(decoded, {
+        square,
+        expectedFrames: frameCount,
+        threshold,
+        maxSize: targetSize,
+        bgColorHint: useBg,
+      });
+    }
 
     log(`Split into ${frameDatas.length} frames`);
 
@@ -149,6 +234,7 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
       prompt,
       model: model ?? DEFAULT_MODEL,
       frameCount: frameDatas.length,
+      useTemplate,
     });
   } catch (err) {
     return errorResponse(err instanceof Error ? err : new Error(String(err)));

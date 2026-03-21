@@ -3,7 +3,8 @@ import { dirname, resolve } from 'path';
 import { generate } from '../engine/gemini.js';
 import { buildSpritePrompt } from '../pipeline/prompt-builder.js';
 import { decodeImage, encodePNG, detectFormat } from '../pipeline/png.js';
-import { detectBgColor, processSpriteColor, snapToPixelArtSize } from '../pipeline/image-ops.js';
+import { processSpriteColor, snapToPixelArtSize, detectBgColor } from '../pipeline/image-ops.js';
+import { resolveBackground, bgToRgb, reconcileBgColor, VALID_BACKGROUNDS } from '../pipeline/background.js';
 import { forgeResponse, errorResponse } from '../utils/response-helpers.js';
 import { log } from '../utils/logger.js';
 import { MODEL_ALIASES, DEFAULT_MODEL } from '../engine/models.js';
@@ -38,8 +39,9 @@ export const forgeSpriteTool = {
       },
       background: {
         type: 'string',
-        enum: ['black', 'white'],
-        description: 'Generation background color for extraction (default: black)',
+        enum: ['auto', ...VALID_BACKGROUNDS],
+        description:
+          'Background color for generation. Use "auto" to pick based on description. Named colors: forest, sky, dungeon, lava, ocean, sand, snow, night. (default: black)',
       },
       aspect: {
         type: 'string',
@@ -71,15 +73,18 @@ export async function handleForgeSprite(input: unknown): Promise<McpToolResponse
     const outputPath = args.outputPath as string;
     const size = args.size as number | undefined;
     const style = (args.style as Style) ?? 'clean';
-    const bg = (args.background as 'black' | 'white') ?? 'black';
+    const bgInput = args.background as string | undefined;
     const aspect = (args.aspect as string) ?? '1:1';
     const square = (args.square as boolean) ?? true;
     const model = args.model as string | undefined;
     const references = args.references as string[] | undefined;
 
+    const bgKey = resolveBackground(bgInput, description);
+    const bgColor = bgToRgb(bgKey);
     const targetSize = snapToPixelArtSize(size ?? 48);
-    const prompt = buildSpritePrompt(description, style, bg, targetSize);
+    const prompt = buildSpritePrompt(description, style, bgKey, targetSize);
     log(`Prompt: ${prompt}`);
+    log(`Background: ${bgKey} (rgb: ${bgColor.r},${bgColor.g},${bgColor.b})`);
 
     const images = await generate({ prompt, model, aspect, references });
     const imgBuf = Buffer.from(images[0]!.b64, 'base64');
@@ -87,11 +92,14 @@ export async function handleForgeSprite(input: unknown): Promise<McpToolResponse
     const decoded = decodeImage(imgBuf);
     const threshold = format === 'jpeg' ? 60 : 40;
 
-    const bgColor = detectBgColor(decoded.pixels, decoded.width, decoded.height);
+    // Detect actual bg from edges, reconcile with hint
+    const detectedBg = detectBgColor(decoded.pixels, decoded.width, decoded.height);
+    const useBg = reconcileBgColor(bgColor, detectedBg, bgKey);
+
     log(
-      `Raw image: ${decoded.width}x${decoded.height} (${format}, bg: rgb(${bgColor.r},${bgColor.g},${bgColor.b}), threshold: ${threshold})`
+      `Raw image: ${decoded.width}x${decoded.height} (${format}, bg: ${bgKey}, detected: rgb(${detectedBg.r},${detectedBg.g},${detectedBg.b}), using: rgb(${useBg.r},${useBg.g},${useBg.b}))`
     );
-    const processed = processSpriteColor(decoded, bgColor, { square, threshold, size: targetSize });
+    const processed = processSpriteColor(decoded, useBg, { square, threshold, size: targetSize });
     const pngBuf = encodePNG(processed.width, processed.height, processed.pixels);
 
     const absPath = resolve(outputPath);

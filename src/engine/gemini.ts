@@ -43,7 +43,8 @@ async function generateViaGemini(
   modelId: string,
   count: number,
   refs: RefImage[],
-  aspect?: string
+  aspect?: string,
+  systemInstruction?: string
 ): Promise<GeneratedImage[]> {
   const url = `${BASE}/${modelId}:generateContent?key=${getApiKey()}`;
 
@@ -68,13 +69,21 @@ async function generateViaGemini(
     log(`Aspect ratio: ${aspect} (via imageConfig)`);
   }
 
+  const requestBody: Record<string, unknown> = {
+    contents: [{ parts }],
+    generationConfig,
+  };
+
+  // System instruction for template-guided generation
+  if (systemInstruction) {
+    requestBody.systemInstruction = { parts: [{ text: systemInstruction }] };
+    log(`System instruction: "${systemInstruction.slice(0, 80)}..."`);
+  }
+
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!res.ok) {
@@ -109,6 +118,7 @@ export interface GenerateOptions {
   aspect?: string;
   count?: number;
   references?: string[];
+  systemInstruction?: string;
 }
 
 export async function generate(opts: GenerateOptions): Promise<GeneratedImage[]> {
@@ -119,7 +129,14 @@ export async function generate(opts: GenerateOptions): Promise<GeneratedImage[]>
   log(`Model: ${modelDef.id} | Count: ${count}`);
 
   const refs = opts.references?.length ? await loadRefImages(opts.references) : [];
-  const images = await generateViaGemini(opts.prompt, modelDef.id, count, refs, opts.aspect);
+  const images = await generateViaGemini(
+    opts.prompt,
+    modelDef.id,
+    count,
+    refs,
+    opts.aspect,
+    opts.systemInstruction
+  );
 
   if (!images.length) {
     throw new Error('No images returned. Try a different model or prompt.');

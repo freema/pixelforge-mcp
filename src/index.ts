@@ -25,6 +25,8 @@ const toolHandlers = new Map<string, (input: unknown) => Promise<McpToolResponse
   ['forge_animation', tools.handleForgeAnimation],
   ['forge_background', tools.handleForgeBackground],
   ['forge_thumbnail', tools.handleForgeThumbnail],
+  ['forge_tileset', tools.handleForgeTileset],
+  ['forge_item_kit', tools.handleForgeItemKit],
   ['process_sprite', tools.handleProcessSprite],
   ['optimize_sprite', tools.handleOptimizeSprite],
 ]);
@@ -34,6 +36,8 @@ const allTools = [
   tools.forgeAnimationTool,
   tools.forgeBackgroundTool,
   tools.forgeThumbnailTool,
+  tools.forgeTilesetTool,
+  tools.forgeItemKitTool,
   tools.processSpriteTool,
   tools.optimizeSpriteTool,
 ];
@@ -100,7 +104,7 @@ async function main() {
 
   log(`${SERVER_NAME} running on stdio`);
   log(
-    'Tools: forge_sprite, forge_animation, forge_background, forge_thumbnail, process_sprite, optimize_sprite'
+    'Tools: forge_sprite, forge_animation, forge_background, forge_thumbnail, forge_tileset, forge_item_kit, process_sprite, optimize_sprite'
   );
   log('Prompts: pixel_art_guide');
 }

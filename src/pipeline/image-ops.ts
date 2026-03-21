@@ -117,6 +117,81 @@ export function makeTransparentColor(
   return out;
 }
 
+/**
+ * Compositing-equation based soft alpha background removal.
+ * Inspired by godogen's rembg_matting.py — produces smooth edges and
+ * correct semi-transparent pixels instead of harsh binary threshold.
+ */
+export function removeBackgroundColor(
+  pixels: Buffer,
+  width: number,
+  height: number,
+  bg: BgColor,
+  opts?: { noiseFloor?: number; solidThreshold?: number }
+): Buffer {
+  const noiseFloor = opts?.noiseFloor ?? 0.08;
+  const solidThreshold = opts?.solidThreshold ?? 0.55;
+  const out = Buffer.from(pixels);
+
+  for (let i = 0; i < width * height * 4; i += 4) {
+    const pr = out[i]!;
+    const pg = out[i + 1]!;
+    const pb = out[i + 2]!;
+
+    // Compute per-channel alpha using compositing equation lower bound.
+    // Skip channels where bg is near 0 or 255 — division is numerically
+    // unstable there (godogen approach). Use a minimum denominator of 32
+    // to prevent tiny bg values from amplifying noise into high alpha.
+    const MIN_DENOM = 32;
+    const alphaR =
+      pr > bg.r
+        ? (pr - bg.r) / Math.max(255 - bg.r, MIN_DENOM)
+        : pr < bg.r
+          ? (bg.r - pr) / Math.max(bg.r, MIN_DENOM)
+          : 0;
+    const alphaG =
+      pg > bg.g
+        ? (pg - bg.g) / Math.max(255 - bg.g, MIN_DENOM)
+        : pg < bg.g
+          ? (bg.g - pg) / Math.max(bg.g, MIN_DENOM)
+          : 0;
+    const alphaB =
+      pb > bg.b
+        ? (pb - bg.b) / Math.max(255 - bg.b, MIN_DENOM)
+        : pb < bg.b
+          ? (bg.b - pb) / Math.max(bg.b, MIN_DENOM)
+          : 0;
+
+    let alpha = Math.max(alphaR, alphaG, alphaB);
+
+    // Apply noise/solid thresholds with linear ramp in between
+    if (alpha < noiseFloor) {
+      alpha = 0;
+    } else if (alpha > solidThreshold) {
+      alpha = 1.0;
+    } else {
+      alpha = (alpha - noiseFloor) / (solidThreshold - noiseFloor);
+    }
+
+    if (alpha === 0) {
+      // Fully transparent — zero out RGB
+      out[i] = 0;
+      out[i + 1] = 0;
+      out[i + 2] = 0;
+      out[i + 3] = 0;
+    } else {
+      // Recover foreground color: fg[c] = clamp((pixel[c] - (1-alpha)*bg[c]) / alpha, 0, 255)
+      const inv = 1 - alpha;
+      out[i] = Math.min(255, Math.max(0, Math.round((pr - inv * bg.r) / alpha)));
+      out[i + 1] = Math.min(255, Math.max(0, Math.round((pg - inv * bg.g) / alpha)));
+      out[i + 2] = Math.min(255, Math.max(0, Math.round((pb - inv * bg.b) / alpha)));
+      out[i + 3] = Math.round(alpha * 255);
+    }
+  }
+
+  return out;
+}
+
 interface Bounds {
   x1: number;
   y1: number;
@@ -407,12 +482,11 @@ export function processSpriteColor(
     size?: number;
   }
 ): ImageData {
-  const thresh = opts.threshold ?? 40;
   const pad = opts.padding ?? 2;
   let { width, height, pixels } = img;
 
   if (!opts.skipTransparent) {
-    pixels = makeTransparentColor(pixels, width, height, bgColor, thresh);
+    pixels = removeBackgroundColor(pixels, width, height, bgColor);
   }
 
   if (!opts.skipCrop) {
@@ -489,14 +563,15 @@ export function splitAndProcess(
     square?: boolean;
     expectedFrames?: number;
     maxSize?: number;
+    bgColorHint?: BgColor;
   }
 ): ImageData[] {
   const pad = opts.padding ?? 4;
   const expected = opts.expectedFrames;
   const maxSize = opts.maxSize ?? 128;
 
-  // Use actual color-based bg detection
-  const bgColor = detectBgColor(img.pixels, img.width, img.height);
+  // Use hint if provided, otherwise detect from edges
+  const bgColor = opts.bgColorHint ?? detectBgColor(img.pixels, img.width, img.height);
   const bg = (bgColor.r + bgColor.g + bgColor.b) / 3 > 128 ? ('white' as Bg) : ('black' as Bg);
   const thresh = opts.threshold ?? 40;
 
@@ -531,13 +606,12 @@ export function splitAndProcess(
     const cy2 = Math.min(img.height, b.y2 + pad);
 
     let sprite = cropPixels(img.pixels, img.width, cx1, cy1, cx2, cy2);
-    // Use color-based transparency for accurate bg removal
-    sprite.pixels = makeTransparentColor(
+    // Use compositing-equation soft alpha for accurate bg removal
+    sprite.pixels = removeBackgroundColor(
       sprite.pixels,
       sprite.width,
       sprite.height,
-      bgColor,
-      thresh
+      bgColor
     );
 
     // Tight crop to non-transparent pixels
@@ -582,4 +656,245 @@ export function splitAndProcess(
   }
 
   return results;
+}
+
+/**
+ * Deterministic grid slicing — splits an image into cols×rows equal cells.
+ * Returns cells in row-major order (left-to-right, top-to-bottom).
+ */
+export function sliceGrid(img: ImageData, cols: number, rows: number): ImageData[] {
+  const cellW = Math.floor(img.width / cols);
+  const cellH = Math.floor(img.height / rows);
+  const cells: ImageData[] = [];
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x1 = col * cellW;
+      const y1 = row * cellH;
+      cells.push(cropPixels(img.pixels, img.width, x1, y1, x1 + cellW, y1 + cellH));
+    }
+  }
+
+  return cells;
+}
+
+// ── 5×7 bitmap font for grid template numbers ────────────────────────────
+
+const DIGIT_FONT: Record<string, number[]> = {
+  '0': [0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e],
+  '1': [0x04, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x0e],
+  '2': [0x0e, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1f],
+  '3': [0x0e, 0x11, 0x01, 0x06, 0x01, 0x11, 0x0e],
+  '4': [0x02, 0x06, 0x0a, 0x12, 0x1f, 0x02, 0x02],
+  '5': [0x1f, 0x10, 0x1e, 0x01, 0x01, 0x11, 0x0e],
+  '6': [0x06, 0x08, 0x10, 0x1e, 0x11, 0x11, 0x0e],
+  '7': [0x1f, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+  '8': [0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e],
+  '9': [0x0e, 0x11, 0x11, 0x0f, 0x01, 0x02, 0x0c],
+};
+
+function drawDigitScaled(
+  pixels: Buffer,
+  imgW: number,
+  digit: string,
+  ox: number,
+  oy: number,
+  r: number,
+  g: number,
+  b: number,
+  scale: number = 1
+): void {
+  const rows = DIGIT_FONT[digit];
+  if (!rows) return;
+  for (let dy = 0; dy < 7; dy++) {
+    const row = rows[dy]!;
+    for (let dx = 0; dx < 5; dx++) {
+      if (row & (1 << (4 - dx))) {
+        for (let sy = 0; sy < scale; sy++) {
+          for (let sx = 0; sx < scale; sx++) {
+            const px = ox + dx * scale + sx;
+            const py = oy + dy * scale + sy;
+            const i = (py * imgW + px) * 4;
+            pixels[i] = r;
+            pixels[i + 1] = g;
+            pixels[i + 2] = b;
+            pixels[i + 3] = 255;
+          }
+        }
+      }
+    }
+  }
+}
+
+function drawNumberScaled(
+  pixels: Buffer,
+  imgW: number,
+  num: number,
+  cx: number,
+  cy: number,
+  r: number,
+  g: number,
+  b: number,
+  scale: number = 1
+): void {
+  const digits = String(num);
+  const charW = 5 * scale;
+  const gapW = 1 * scale;
+  const totalW = digits.length * (charW + gapW) - gapW;
+  const charH = 7 * scale;
+  const ox = cx - Math.floor(totalW / 2);
+  const oy = cy - Math.floor(charH / 2);
+  for (let i = 0; i < digits.length; i++) {
+    drawDigitScaled(pixels, imgW, digits[i]!, ox + i * (charW + gapW), oy, r, g, b, scale);
+  }
+}
+
+/** Draw a filled circle at (cx, cy) with given radius and color */
+function drawFilledCircle(
+  pixels: Buffer,
+  imgW: number,
+  imgH: number,
+  cx: number,
+  cy: number,
+  radius: number,
+  r: number,
+  g: number,
+  b: number
+): void {
+  const r2 = radius * radius;
+  const x1 = Math.max(0, Math.floor(cx - radius));
+  const x2 = Math.min(imgW - 1, Math.ceil(cx + radius));
+  const y1 = Math.max(0, Math.floor(cy - radius));
+  const y2 = Math.min(imgH - 1, Math.ceil(cy + radius));
+  for (let py = y1; py <= y2; py++) {
+    for (let px = x1; px <= x2; px++) {
+      const dx = px - cx;
+      const dy = py - cy;
+      if (dx * dx + dy * dy <= r2) {
+        const i = (py * imgW + px) * 4;
+        pixels[i] = r;
+        pixels[i + 1] = g;
+        pixels[i + 2] = b;
+        pixels[i + 3] = 255;
+      }
+    }
+  }
+}
+
+/**
+ * Generate a grid template PNG with RED grid lines and white-circle numbered cells.
+ * Godogen-style: red 2px lines, white filled circles with black numbers.
+ * If the background color is close to red, switch lines to blue.
+ */
+export function generateGridTemplate(
+  cols: number,
+  rows: number,
+  cellSize: number,
+  bgColor: BgColor
+): ImageData {
+  const lineWidth = 2;
+  const width = cols * cellSize;
+  const height = rows * cellSize;
+  const pixels = Buffer.alloc(width * height * 4);
+
+  // Fill background
+  for (let i = 0; i < width * height; i++) {
+    pixels[i * 4] = bgColor.r;
+    pixels[i * 4 + 1] = bgColor.g;
+    pixels[i * 4 + 2] = bgColor.b;
+    pixels[i * 4 + 3] = 255;
+  }
+
+  // Grid line color — RED by default, BLUE if bg is close to red
+  const closeToRed =
+    Math.abs(bgColor.r - 255) < 60 &&
+    Math.abs(bgColor.g - 0) < 60 &&
+    Math.abs(bgColor.b - 0) < 60;
+  const lineR = closeToRed ? 0 : 255;
+  const lineG = 0;
+  const lineB = closeToRed ? 255 : 0;
+
+  // Draw vertical grid lines (2px wide)
+  for (let col = 0; col <= cols; col++) {
+    const xBase = col * cellSize;
+    for (let lx = 0; lx < lineWidth; lx++) {
+      const x = Math.min(xBase + lx, width - 1);
+      for (let y = 0; y < height; y++) {
+        const i = (y * width + x) * 4;
+        pixels[i] = lineR;
+        pixels[i + 1] = lineG;
+        pixels[i + 2] = lineB;
+        pixels[i + 3] = 255;
+      }
+    }
+  }
+
+  // Draw horizontal grid lines (2px wide)
+  for (let row = 0; row <= rows; row++) {
+    const yBase = row * cellSize;
+    for (let ly = 0; ly < lineWidth; ly++) {
+      const y = Math.min(yBase + ly, height - 1);
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        pixels[i] = lineR;
+        pixels[i + 1] = lineG;
+        pixels[i + 2] = lineB;
+        pixels[i + 3] = 255;
+      }
+    }
+  }
+
+  // Number each cell with a white circle background and black digit
+  const circleRadius = Math.max(15, Math.floor(cellSize * 0.2));
+  // Pick font scale: 2x for cells >= 128, 3x for cells >= 200, else 1x
+  const fontScale = cellSize >= 200 ? 3 : cellSize >= 100 ? 2 : 1;
+
+  let cellNum = 1;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const cx = col * cellSize + Math.floor(cellSize / 2);
+      const cy = row * cellSize + Math.floor(cellSize / 2);
+
+      // White filled circle
+      drawFilledCircle(pixels, width, height, cx, cy, circleRadius, 255, 255, 255);
+
+      // Black number on top
+      drawNumberScaled(pixels, width, cellNum, cx, cy, 0, 0, 0, fontScale);
+      cellNum++;
+    }
+  }
+
+  return { width, height, pixels };
+}
+
+/**
+ * Grid slicing with edge cropping — removes grid lines from each cell.
+ * Crops `lineWidth + 2` pixels (default 4px) from each edge of each cell,
+ * matching godogen's approach of removing the red lines + margin.
+ */
+export function sliceGridCropped(
+  img: ImageData,
+  cols: number,
+  rows: number,
+  cropMargin?: number
+): ImageData[] {
+  const cellW = Math.floor(img.width / cols);
+  const cellH = Math.floor(img.height / rows);
+  // Crop ~3% of cell size (handles upscaled grid lines + JPEG artifacts)
+  const margin = cropMargin ?? Math.max(4, Math.round(Math.min(cellW, cellH) * 0.03));
+  const cells: ImageData[] = [];
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x1 = col * cellW + margin;
+      const y1 = row * cellH + margin;
+      const x2 = Math.min((col + 1) * cellW - margin, img.width);
+      const y2 = Math.min((row + 1) * cellH - margin, img.height);
+      if (x2 > x1 && y2 > y1) {
+        cells.push(cropPixels(img.pixels, img.width, x1, y1, x2, y2));
+      }
+    }
+  }
+
+  return cells;
 }
