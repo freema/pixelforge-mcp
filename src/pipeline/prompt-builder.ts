@@ -55,6 +55,33 @@ export function detailHintForSize(size: number): string {
   return 'Detailed pixel art, fine features allowed, rich color palette.';
 }
 
+// ── Single animation frame prompt (reference-chain mode) ─────────────────
+
+export function buildAnimationFramePrompt(
+  description: string,
+  frameDescription: string,
+  isFirstFrame: boolean,
+  style: Style = 'clean',
+  bg: Background = 'black',
+  size: number = 48
+): string {
+  const bgEntry = BG_COLOR_MAP[bg];
+  const refNote = isFirstFrame
+    ? ''
+    : ' Must match the reference image exactly in style, proportions, colors, and outline thickness — only the pose/state changes.';
+  const parts = [
+    `${description}, ${frameDescription}.${refNote}`,
+    `${STYLE_PRESETS[style]}.`,
+    bgEntry ? `Centered on a solid ${bgEntry.name} (${bgEntry.hex}) background.` : '',
+    PIXEL_ART_CORE.join(', ') + '.',
+    SPRITE_RULES.join(', ') + '.',
+  ].filter(Boolean);
+  const hint = detailHintForSize(size);
+  if (hint) parts.push(hint);
+  parts.push(NEGATIVE_ALWAYS);
+  return parts.join(' ');
+}
+
 // ── Sprite prompt (godogen-simplified) ────────────────────────────────────
 
 export function buildSpritePrompt(

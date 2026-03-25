@@ -10,6 +10,7 @@ interface BgEntry {
 export const BG_COLOR_MAP: Record<Background, BgEntry> = {
   black: { rgb: { r: 0, g: 0, b: 0 }, hex: '#000000', name: 'black' },
   white: { rgb: { r: 255, g: 255, b: 255 }, hex: '#FFFFFF', name: 'white' },
+  chromakey: { rgb: { r: 0, g: 255, b: 0 }, hex: '#00FF00', name: 'chroma key green' },
   forest: { rgb: { r: 74, g: 103, b: 65 }, hex: '#4A6741', name: 'forest green' },
   sky: { rgb: { r: 74, g: 107, b: 138 }, hex: '#4A6B8A', name: 'sky blue' },
   dungeon: { rgb: { r: 42, g: 42, b: 42 }, hex: '#2A2A2A', name: 'dungeon gray' },
@@ -62,6 +63,9 @@ export function bgPromptFragment(bgKey: Background): string {
   const entry = BG_COLOR_MAP[bgKey]!;
   if (bgKey === 'black' || bgKey === 'white') {
     return `Pure ${bgKey} background, completely flat solid ${bgKey} with no variation.`;
+  }
+  if (bgKey === 'chromakey') {
+    return `Solid flat chroma key green background, EXACT hex #00FF00 (RGB 0, 255, 0) with NO gradients, NO noise, NO texture. The sprite must have a bold dark pixel outline 2-3 pixels wide around the entire shape.`;
   }
   return `Solid ${entry.name} background (${entry.hex}), completely flat uniform color with no variation.`;
 }

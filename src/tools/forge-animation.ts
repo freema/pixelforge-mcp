@@ -5,6 +5,7 @@ import { join } from 'path';
 import { generate } from '../engine/gemini.js';
 import {
   buildAnimationPrompt,
+  buildAnimationFramePrompt,
   buildTemplateAnimationUserPrompt,
   buildTemplateSystemPrompt,
   computeGridLayout,
@@ -76,7 +77,7 @@ export const forgeAnimationTool = {
         type: 'string',
         enum: ['auto', ...VALID_BACKGROUNDS],
         description:
-          'Background color for generation. Use "auto" to pick based on description. Named colors: forest, sky, dungeon, lava, ocean, sand, snow, night. (default: black)',
+          'Background color for generation. Use "auto" to pick based on description. Use "chromakey" for best transparency (HSV-based green screen removal). Named colors: chromakey, forest, sky, dungeon, lava, ocean, sand, snow, night. (default: black)',
       },
       size: {
         type: 'number',
@@ -91,6 +92,11 @@ export const forgeAnimationTool = {
         type: 'boolean',
         description:
           'Use grid template reference for precise frame placement (default: false). When true, generates a numbered grid template and sends it as a reference image for more consistent frame splitting.',
+      },
+      useReferenceChain: {
+        type: 'boolean',
+        description:
+          'Generate each frame individually using the first frame as style reference (default: true). Produces much more consistent animations than sprite sheet splitting. Each frame is a separate API call with the idle/first frame as reference image.',
       },
       model: {
         type: 'string',
@@ -121,6 +127,7 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
     const size = args.size as number | undefined;
     const square = (args.square as boolean) ?? true;
     const useTemplate = (args.useTemplate as boolean) ?? false;
+    const useReferenceChain = (args.useReferenceChain as boolean) ?? true;
     const model = args.model as string | undefined;
     const references = args.references as string[] | undefined;
 
@@ -128,6 +135,91 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
     const bgColor = bgToRgb(bgKey);
     const targetSize = snapToPixelArtSize(size ?? 48);
 
+    // ── Reference Chain Mode ──────────────────────────────────────────
+    // Generates each frame individually, using frame 0 as reference for consistency.
+    // Much better results than sprite sheet splitting.
+    if (useReferenceChain && !useTemplate) {
+      log(`Using reference-chain mode: generating ${frameCount} frames individually`);
+
+      const results: ForgeResult[] = [];
+      let firstFramePath: string | undefined;
+
+      for (let i = 0; i < frameCount; i++) {
+        const name = names?.[i] ?? `frame-${i}`;
+        const framePath = `${outputPrefix}-${name}.png`;
+        const absPath = resolve(framePath);
+
+        // Build per-frame description
+        const frameDesc = frameDescriptions?.[i]
+          ?? (i === 0 ? `idle ready position, ${action}` : `${action} frame ${i + 1} of ${frameCount}`);
+
+        const framePrompt = buildAnimationFramePrompt(
+          description,
+          frameDesc,
+          i === 0,
+          style,
+          bgKey,
+          targetSize,
+        );
+
+        // First frame: use user references only. Subsequent: add first frame as reference.
+        const frameRefs = references ? [...references] : [];
+        if (i > 0 && firstFramePath) {
+          frameRefs.push(firstFramePath);
+        }
+
+        log(`Frame ${i} (${name}): ${frameDesc}`);
+
+        const images = await generate({
+          prompt: framePrompt,
+          model,
+          aspect: '1:1',
+          references: frameRefs.length ? frameRefs : undefined,
+        });
+
+        const imgBuf = Buffer.from(images[0]!.b64, 'base64');
+        const format = detectFormat(imgBuf);
+        const decoded = decodeImage(imgBuf);
+        const threshold = format === 'jpeg' ? 60 : 40;
+
+        const detectedBg = detectBgColor(decoded.pixels, decoded.width, decoded.height);
+        const useBg = reconcileBgColor(bgColor, detectedBg, bgKey);
+
+        const processed = processSpriteColor(decoded, useBg, {
+          square,
+          threshold,
+          size: targetSize,
+          chromakey: bgKey === 'chromakey',
+        });
+
+        await mkdir(dirname(absPath), { recursive: true });
+        const pngBuf = encodePNG(processed.width, processed.height, processed.pixels);
+        await writeFile(absPath, pngBuf);
+
+        // Save first frame path as reference for subsequent frames
+        if (i === 0) {
+          firstFramePath = absPath;
+        }
+
+        results.push({
+          path: framePath,
+          width: processed.width,
+          height: processed.height,
+          size: pngBuf.length,
+        });
+
+        log(`Frame: ${framePath} (${processed.width}x${processed.height})`);
+      }
+
+      return forgeResponse(results, {
+        prompt: `reference-chain: ${frameCount} individual frames`,
+        model: model ?? DEFAULT_MODEL,
+        frameCount: results.length,
+        useTemplate: false,
+      });
+    }
+
+    // ── Legacy Sprite Sheet Mode ──────────────────────────────────────
     let prompt: string;
     let allRefs = references ? [...references] : [];
     let tempTemplatePath: string | undefined;
@@ -207,6 +299,7 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
           square,
           threshold,
           size: targetSize,
+          chromakey: bgKey === 'chromakey',
         })
       );
     } else {
@@ -217,6 +310,7 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
         threshold,
         maxSize: targetSize,
         bgColorHint: useBg,
+        chromakey: bgKey === 'chromakey',
       });
     }
 

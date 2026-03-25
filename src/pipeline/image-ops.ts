@@ -118,6 +118,95 @@ export function makeTransparentColor(
 }
 
 /**
+ * HSV-based chromakey green background removal.
+ * Detects green pixels via Hue ±22° of 120°, Sat > 0.3, Val > 0.3
+ * and sets them transparent. Edge pixels get soft alpha via distance
+ * from the green hue center. Much more reliable than compositing eq.
+ */
+export function removeChromakeyGreen(
+  pixels: Buffer,
+  width: number,
+  height: number,
+): Buffer {
+  const out = Buffer.from(pixels);
+
+  for (let i = 0; i < width * height * 4; i += 4) {
+    const r = out[i]!;
+    const g = out[i + 1]!;
+    const b = out[i + 2]!;
+
+    // Convert RGB to HSV
+    const rn = r / 255;
+    const gn = g / 255;
+    const bn = b / 255;
+    const max = Math.max(rn, gn, bn);
+    const min = Math.min(rn, gn, bn);
+    const delta = max - min;
+
+    let h = 0;
+    if (delta > 0) {
+      if (max === rn) h = 60 * (((gn - bn) / delta) % 6);
+      else if (max === gn) h = 60 * ((bn - rn) / delta + 2);
+      else h = 60 * ((rn - gn) / delta + 4);
+      if (h < 0) h += 360;
+    }
+    const s = max === 0 ? 0 : delta / max;
+    const v = max;
+
+    // Green detection: hue 98°-142° (120° ± 22°), sat > 0.3, val > 0.3
+    const hueCenter = 120;
+    const hueTolerance = 22;
+    const hueDist = Math.abs(h - hueCenter);
+
+    if (hueDist <= hueTolerance && s > 0.3 && v > 0.3) {
+      // Pure green background — fully transparent
+      out[i] = 0;
+      out[i + 1] = 0;
+      out[i + 2] = 0;
+      out[i + 3] = 0;
+    } else if (hueDist <= hueTolerance + 10 && s > 0.15 && v > 0.2) {
+      // Edge zone — soft alpha ramp based on distance from green
+      const edgeDist = Math.max(0, hueTolerance + 10 - hueDist) / 10;
+      const satFade = s > 0.3 ? 1.0 : (s - 0.15) / 0.15;
+      const fade = edgeDist * satFade;
+      const alpha = Math.max(0, 1 - fade);
+
+      if (alpha < 0.05) {
+        out[i] = 0;
+        out[i + 1] = 0;
+        out[i + 2] = 0;
+        out[i + 3] = 0;
+      } else {
+        out[i + 3] = Math.round(alpha * 255);
+      }
+    }
+    // else: keep pixel as-is (fully opaque, alpha stays 255)
+  }
+
+  // Edge softening: average alpha with 4 neighbors for smooth edges
+  const softened = Buffer.from(out);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = (y * width + x) * 4;
+      const a = out[i + 3]!;
+      // Only soften partially transparent edge pixels
+      if (a > 0 && a < 255) {
+        const neighbors = [
+          out[((y - 1) * width + x) * 4 + 3]!,
+          out[((y + 1) * width + x) * 4 + 3]!,
+          out[(y * width + x - 1) * 4 + 3]!,
+          out[(y * width + x + 1) * 4 + 3]!,
+        ];
+        const avg = (a + neighbors[0] + neighbors[1] + neighbors[2] + neighbors[3]) / 5;
+        softened[i + 3] = Math.round(avg);
+      }
+    }
+  }
+
+  return softened;
+}
+
+/**
  * Compositing-equation based soft alpha background removal.
  * Inspired by godogen's rembg_matting.py — produces smooth edges and
  * correct semi-transparent pixels instead of harsh binary threshold.
@@ -129,8 +218,8 @@ export function removeBackgroundColor(
   bg: BgColor,
   opts?: { noiseFloor?: number; solidThreshold?: number }
 ): Buffer {
-  const noiseFloor = opts?.noiseFloor ?? 0.08;
-  const solidThreshold = opts?.solidThreshold ?? 0.55;
+  const noiseFloor = opts?.noiseFloor ?? 0.06;
+  const solidThreshold = opts?.solidThreshold ?? 0.35;
   const out = Buffer.from(pixels);
 
   for (let i = 0; i < width * height * 4; i += 4) {
@@ -457,7 +546,7 @@ export function pixelateDownscale(
 
       const di = (dy * dstW + dx) * 4;
       const totalPixels = (sx2 - sx1) * (sy2 - sy1);
-      if (count > 0 && count >= totalPixels * 0.3) {
+      if (count > 0 && count >= totalPixels * 0.15) {
         // Enough opaque pixels — this is content
         out[di] = Math.round(r / count);
         out[di + 1] = Math.round(g / count);
@@ -480,13 +569,19 @@ export function processSpriteColor(
     skipCrop?: boolean;
     skipTransparent?: boolean;
     size?: number;
+    chromakey?: boolean;
   }
 ): ImageData {
   const pad = opts.padding ?? 2;
   let { width, height, pixels } = img;
 
   if (!opts.skipTransparent) {
-    pixels = removeBackgroundColor(pixels, width, height, bgColor);
+    // Use HSV chromakey removal for green backgrounds, compositing eq for others
+    if (opts.chromakey) {
+      pixels = removeChromakeyGreen(pixels, width, height);
+    } else {
+      pixels = removeBackgroundColor(pixels, width, height, bgColor);
+    }
   }
 
   if (!opts.skipCrop) {
@@ -564,6 +659,7 @@ export function splitAndProcess(
     expectedFrames?: number;
     maxSize?: number;
     bgColorHint?: BgColor;
+    chromakey?: boolean;
   }
 ): ImageData[] {
   const pad = opts.padding ?? 4;
@@ -606,8 +702,12 @@ export function splitAndProcess(
     const cy2 = Math.min(img.height, b.y2 + pad);
 
     let sprite = cropPixels(img.pixels, img.width, cx1, cy1, cx2, cy2);
-    // Use compositing-equation soft alpha for accurate bg removal
-    sprite.pixels = removeBackgroundColor(sprite.pixels, sprite.width, sprite.height, bgColor);
+    // Remove background: HSV chromakey for green, compositing equation for others
+    if (opts.chromakey) {
+      sprite.pixels = removeChromakeyGreen(sprite.pixels, sprite.width, sprite.height);
+    } else {
+      sprite.pixels = removeBackgroundColor(sprite.pixels, sprite.width, sprite.height, bgColor);
+    }
 
     // Tight crop to non-transparent pixels
     let x1t = sprite.width,

@@ -13,6 +13,7 @@ export type Style = 'neon' | 'retro' | 'gameboy' | 'snes' | 'clean';
 export type Background =
   | 'black'
   | 'white'
+  | 'chromakey'
   | 'forest'
   | 'sky'
   | 'dungeon'

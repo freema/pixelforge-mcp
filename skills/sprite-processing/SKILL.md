@@ -14,9 +14,11 @@ Remove background and auto-crop:
 process_sprite
   inputPath: "raw-enemy.png"
   outputPath: "public/assets/games/rpg/enemy.png"
-  background: "black"
+  background: "chromakey"
   square: true
 ```
+
+**Prefer `chromakey` background** — uses HSV-based green screen removal. Much cleaner than black/white.
 
 ## Split Sprite Sheet
 
@@ -27,7 +29,7 @@ process_sprite
   outputPath: "public/assets/games/rpg/hero"
   split: true
   names: ["idle", "walk-1", "walk-2", "attack"]
-  background: "white"
+  background: "chromakey"
   square: true
 ```
 Outputs: `hero-idle.png`, `hero-walk-1.png`, `hero-walk-2.png`, `hero-attack.png`
@@ -53,11 +55,20 @@ process_sprite
   skipCrop: true
 ```
 
+## Background Removal Methods
+
+| Background | Method | Best For |
+|-----------|--------|----------|
+| `chromakey` | HSV green screen | **BEST** — cleanest edges, no artifacts |
+| `black` | Compositing equation | Dark-themed sprites |
+| `white` | Compositing equation | Light-themed sprites |
+| `auto` | Edge detection | Unknown backgrounds |
+
 ## Options Reference
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `background` | auto-detect | `"black"`, `"white"`, or `"auto"` |
+| `background` | auto-detect | `"chromakey"`, `"black"`, `"white"`, or `"auto"` |
 | `threshold` | 20 | Color detection sensitivity (0-255) |
 | `square` | false | Pad output to square dimensions |
 | `padding` | 2 | Pixels of padding around content |
