@@ -123,11 +123,7 @@ export function makeTransparentColor(
  * and sets them transparent. Edge pixels get soft alpha via distance
  * from the green hue center. Much more reliable than compositing eq.
  */
-export function removeChromakeyGreen(
-  pixels: Buffer,
-  width: number,
-  height: number,
-): Buffer {
+export function removeChromakeyGreen(pixels: Buffer, width: number, height: number): Buffer {
   const out = Buffer.from(pixels);
 
   for (let i = 0; i < width * height * 4; i += 4) {

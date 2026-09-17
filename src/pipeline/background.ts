@@ -26,6 +26,7 @@ export const VALID_BACKGROUNDS = Object.keys(BG_COLOR_MAP) as Background[];
 const AUTO_KEYWORDS: Record<Background, string[]> = {
   black: [],
   white: [],
+  chromakey: [],
   forest: ['forest', 'tree', 'woodland', 'jungle', 'bush', 'grass', 'meadow'],
   sky: ['sky', 'cloud', 'bird', 'flying', 'airplane', 'airship'],
   dungeon: ['dungeon', 'cave', 'underground', 'crypt', 'tomb', 'mine'],

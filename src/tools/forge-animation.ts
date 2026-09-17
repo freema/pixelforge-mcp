@@ -150,8 +150,11 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
         const absPath = resolve(framePath);
 
         // Build per-frame description
-        const frameDesc = frameDescriptions?.[i]
-          ?? (i === 0 ? `idle ready position, ${action}` : `${action} frame ${i + 1} of ${frameCount}`);
+        const frameDesc =
+          frameDescriptions?.[i] ??
+          (i === 0
+            ? `idle ready position, ${action}`
+            : `${action} frame ${i + 1} of ${frameCount}`);
 
         const framePrompt = buildAnimationFramePrompt(
           description,
@@ -159,7 +162,7 @@ export async function handleForgeAnimation(input: unknown): Promise<McpToolRespo
           i === 0,
           style,
           bgKey,
-          targetSize,
+          targetSize
         );
 
         // First frame: use user references only. Subsequent: add first frame as reference.
