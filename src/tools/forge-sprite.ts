@@ -104,7 +104,12 @@ export async function handleForgeSprite(input: unknown): Promise<McpToolResponse
     log(
       `Raw image: ${decoded.width}x${decoded.height} (${format}, bg: ${bgKey}, detected: rgb(${detectedBg.r},${detectedBg.g},${detectedBg.b}), using: rgb(${useBg.r},${useBg.g},${useBg.b}))`
     );
-    const processed = processSpriteColor(decoded, useBg, { square, threshold, size: targetSize, chromakey: bgKey === 'chromakey' });
+    const processed = processSpriteColor(decoded, useBg, {
+      square,
+      threshold,
+      size: targetSize,
+      chromakey: bgKey === 'chromakey',
+    });
     const pngBuf = encodePNG(processed.width, processed.height, processed.pixels);
 
     const absPath = resolve(outputPath);
