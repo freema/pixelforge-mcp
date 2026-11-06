@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `forge_animation` now makes one Gemini request per frame by default (see reference-chain mode above), so an animation uses as many requests as it has frames.
-- `@modelcontextprotocol/sdk` raised from `^1.17.1` to `^1.32.2`, and all transitive dependencies refreshed. `npm audit --omit=dev` reports no vulnerabilities. The tool list and schemas are unchanged.
+- `@modelcontextprotocol/sdk` raised from `^1.17.1` to `^1.32.2`, and all transitive dependencies refreshed. `npm audit --omit=dev` reports no vulnerabilities. The update itself does not change the tool list or the tool schemas.
 - Development dependencies refreshed within their current major versions (vitest 4.1, eslint 10.14, typescript-eslint 8.72, prettier 3.9, tsx 4.23).
 - Releases are published to npm from GitHub Actions through trusted publishing (OIDC) with provenance; no npm token is involved.
 
