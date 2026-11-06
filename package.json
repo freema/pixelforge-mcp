@@ -1,13 +1,14 @@
 {
   "name": "pixelforge-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "mcpName": "io.github.freema/pixelforge-mcp",
   "description": "MCP server that forges pixel art sprites & game assets using Google Gemini",
   "author": "Tomas Grasl",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "pixelforge-mcp": "./dist/index.js"
+    "pixelforge-mcp": "dist/index.js"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -30,21 +31,21 @@
     "inspector:dev": "npx @modelcontextprotocol/inspector npx tsx src/index.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "jpeg-js": "^0.4.4"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.56.1",
-    "@typescript-eslint/parser": "^8.56.1",
-    "eslint": "^10.0.3",
+    "@types/node": "^22.20.5",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
-    "prettier": "^3.8.1",
+    "eslint-plugin-prettier": "^5.5.7",
+    "prettier": "^3.9.10",
     "tsup": "^8.0.0",
-    "tsx": "^4.7.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.3.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=20.0.0"
